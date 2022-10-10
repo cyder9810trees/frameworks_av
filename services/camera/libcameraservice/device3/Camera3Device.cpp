@@ -198,11 +198,6 @@ status_t Camera3Device::initializeCommonLocked() {
         mDeviceTimeBaseIsRealtime = true;
     }
 
-#ifdef TARGET_CAMERA_BOOTTIME_TIMESTAMP
-    // Always calculate the offset if requested
-    mTimestampOffset = getMonoToBoottimeOffset();
-#endif
-
     // Will the HAL be sending in early partial result metadata?
     camera_metadata_entry partialResultsCount =
             mDeviceInfo.find(ANDROID_REQUEST_PARTIAL_RESULT_COUNT);
@@ -436,6 +431,11 @@ ssize_t Camera3Device::getJpegBufferSize(const CameraMetadata &info, uint32_t wi
             (chosenMaxJpegResolution.width * chosenMaxJpegResolution.height);
     ssize_t jpegBufferSize = scaleFactor * (maxJpegBufferSize - kMinJpegBufferSize) +
             kMinJpegBufferSize;
+    if (jpegBufferSize > maxJpegBufferSize) {
+        ALOGI("%s: jpeg buffer size calculated is > maxJpeg bufferSize(%zd), clamping",
+                  __FUNCTION__, maxJpegBufferSize);
+        jpegBufferSize = maxJpegBufferSize;
+    }
     return jpegBufferSize;
 }
 
@@ -3122,15 +3122,9 @@ status_t Camera3Device::RequestThread::clear(
 
 status_t Camera3Device::RequestThread::flush() {
     ATRACE_CALL();
-    status_t flush_status;
     Mutex::Autolock l(mFlushLock);
 
-    flush_status = mInterface->flush();
-    // We have completed flush, signal RequestThread::waitForNextRequestLocked() to no longer wait for
-    // new requests
-    mRequestSignal.signal();
-
-    return flush_status;
+    return mInterface->flush();
 }
 
 void Camera3Device::RequestThread::setPaused(bool paused) {
